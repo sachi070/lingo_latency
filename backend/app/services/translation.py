@@ -1,60 +1,55 @@
-import hashlib
 import json
-import logging
 from groq import AsyncGroq
 from app.config import settings
+from app.core.redis import get_redis
 
-logger = logging.getLogger(__name__)
+groq_client = AsyncGroq(api_key=settings.GROQ_API_KEY)
 
-class TranslationService:
-    def __init__(self):
-        self.client = AsyncGroq(api_key=settings.GROQ_API_KEY)
-        self.model = "llama3-8b-8192"
 
-    async def translate_message(self, text: str, source_lang: str, target_lang: str, redis) -> dict:
-        if source_lang.lower() == target_lang.lower():
-            return {"translated": text, "cached": False, "confidence": 1.0}
+async def get_or_translate(
+    message_id: str,
+    source_text: str,
+    source_lang: str,
+    target_lang: str
+) -> str:
+    """Checks Redis cache first. On miss, calls Groq LLM and caches the result for 1 hour."""
+    if source_lang.lower() == target_lang.lower():
+        return source_text
 
-        hash_input = f"{text}:{source_lang}:{target_lang}".encode("utf-8")
-        cache_key = f"xlat:{hashlib.md5(hash_input).hexdigest()}"
-        
-        try:
-            cached_result = await redis.get(cache_key)
-            if cached_result:
-                return {**json.loads(cached_result), "cached": True}
-        except Exception as e:
-            logger.error(f"Redis cache read failed: {e}")
+    redis = await get_redis()
+    cache_key = f"translation:{message_id}:{target_lang.lower()}"
 
-        system_prompt = (
-            f"You are a low-latency real-time chat translation engine.\n"
-            f"Translate the incoming text from {source_lang} to {target_lang}.\n"
-            f"Preserve conversational context, slang, emojis, and emotional tone.\n"
-            f"Return EXACTLY a valid JSON object matching this schema:\n"
-            f'{{"translated": "string", "confidence": float}}'
+    # 1. Try Redis Cache
+    cached_text = await redis.get(cache_key)
+    if cached_text:
+        return cached_text
+
+    # 2. Cache Miss — Call Groq
+    system_prompt = (
+        "You are a hyper-fast real-time chat translator. "
+        "Translate the input accurately into the requested target language. "
+        "Maintain tone, formatting, and emojis. Return ONLY the translated string — "
+        "no conversational intro, quotes, or explanation."
+    )
+
+    user_prompt = f"Source language: {source_lang}\nTarget language: {target_lang}\nText: {source_text}"
+
+    try:
+        response = await groq_client.chat.completions.create(
+            model=settings.DEFAULT_TRANSLATION_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.2,
+            max_tokens=256
         )
+        translated = response.choices[0].message.content.strip()
+        
+        # 3. Store in Redis with 1-hour TTL
+        await redis.set(cache_key, translated, ex=3600)
+        return translated
 
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Text to translate: {text}"}
-                ],
-                temperature=0.2,
-                response_format={"type": "json_object"}
-            )
-            
-            raw_content = response.choices[0].message.content
-            result = json.loads(raw_content)
-            
-            try:
-                await redis.setex(cache_key, 3600, json.dumps(result))
-            except Exception as e:
-                logger.error(f"Redis cache write failed: {e}")
-
-            return {**result, "cached": False}
-        except Exception as e:
-            logger.error(f"Groq API pipeline failed: {e}")
-            return {"translated": text, "cached": False, "confidence": 0.0}
-
-translation_service = TranslationService()
+    except Exception as e:
+        print(f"[Groq Error] Falling back to raw source text: {e}")
+        return source_text

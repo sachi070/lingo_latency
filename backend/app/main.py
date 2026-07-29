@@ -20,7 +20,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Permissive CORS configuration to prevent 403 on WebSocket upgrades
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,7 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount routes
+# Root-level mount so path is /ws/chat/{room_id}
 app.include_router(ws_router)
 
 
