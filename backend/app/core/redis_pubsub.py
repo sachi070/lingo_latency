@@ -6,16 +6,14 @@ from app.services.translation import get_or_translate
 
 active_subscriptions = set()
 
-
-async def publish_message(room_id: str, payload: dict):
-    """Publishes a raw message event to the Redis room channel."""
+async def publish_event(room_id: str, event_type: str, payload: dict):
+    """Generic publisher for messages, presence, and typing events."""
     redis = await get_redis()
     channel = f"room:{room_id}"
-    await redis.publish(channel, json.dumps(payload))
-
+    data = {"event_type": event_type, "payload": payload}
+    await redis.publish(channel, json.dumps(data))
 
 async def subscribe_to_room(room_id: str):
-    """Ensures this node is listening to the Redis pub/sub channel for room_id."""
     if room_id in active_subscriptions:
         return
 
@@ -25,56 +23,83 @@ async def subscribe_to_room(room_id: str):
     await pubsub.subscribe(channel)
     active_subscriptions.add(room_id)
 
-    # Spawn background listener loop for this room
     asyncio.create_task(_listen_channel(pubsub, room_id))
 
-
 async def _listen_channel(pubsub, room_id: str):
-    """Loops on Redis messages and fans them out translated to local WebSockets."""
     try:
         async for message in pubsub.listen():
             if message["type"] != "message":
                 continue
 
-            raw_data = json.loads(message["data"])
-            
-            # Extract fields
-            msg_id = raw_data["message_id"]
-            sender_id = raw_data["sender_id"]
-            sender_name = raw_data["sender_name"]
-            source_text = raw_data["source_text"]
-            source_lang = raw_data["source_lang"]
-            timestamp = raw_data["timestamp"]
+            raw_event = json.loads(message["data"])
+            event_type = raw_event.get("event_type")
+            payload = raw_event.get("payload")
 
-            # Local connections for this node
             local_clients = ws_manager.get_local_clients_for_room(room_id)
             if not local_clients:
                 break
 
-            # Deduplicated translation lazy dispatch
-            for ws, client_info in local_clients:
-                target_lang = client_info["language"]
+            
+            # 1. EVENT: CHAT MESSAGE (Translated per client)
+            
+            if event_type == "message":
+                msg_id = payload["message_id"]
+                sender_id = payload["sender_id"]
+                sender_name = payload["sender_name"]
+                source_text = payload["source_text"]
+                source_lang = payload["source_lang"]
+                timestamp = payload["timestamp"]
 
-                # Fetch/Cache Translation
-                translated = await get_or_translate(
-                    message_id=msg_id,
-                    source_text=source_text,
-                    source_lang=source_lang,
-                    target_lang=target_lang
-                )
+                for ws, client_info in local_clients:
+                    target_lang = client_info["language"]
 
-                outbound_data = {
-                    "message_id": msg_id,
+                    translated = await get_or_translate(
+                        message_id=msg_id,
+                        source_text=source_text,
+                        source_lang=source_lang,
+                        target_lang=target_lang
+                    )
+
+                    outbound = {
+                        "type": "message",
+                        "message_id": msg_id,
+                        "room_id": room_id,
+                        "sender_id": sender_id,
+                        "sender_name": sender_name,
+                        "source_lang": source_lang,
+                        "target_lang": target_lang,
+                        "translated_text": translated,
+                        "timestamp": timestamp
+                    }
+                    await ws.send_text(json.dumps(outbound))
+
+            
+            # 2. EVENT: PRESENCE UPDATE (Who's online list)
+            
+            elif event_type == "presence_update":
+                outbound = {
+                    "type": "presence_update",
                     "room_id": room_id,
-                    "sender_id": sender_id,
-                    "sender_name": sender_name,
-                    "source_lang": source_lang,
-                    "target_lang": target_lang,
-                    "translated_text": translated,
-                    "timestamp": timestamp
+                    "online_users": payload["online_users"]
                 }
+                for ws, _ in local_clients:
+                    await ws.send_text(json.dumps(outbound))
 
-                await ws.send_text(json.dumps(outbound_data))
+            
+            # 3. EVENT: USER TYPING (Forwarded to all except sender)
+            elif event_type == "user_typing":
+                sender_id = payload["user_id"]
+                outbound = {
+                    "type": "user_typing",
+                    "room_id": room_id,
+                    "user_id": sender_id,
+                    "display_name": payload["display_name"],
+                    "is_typing": payload["is_typing"]
+                }
+                for ws, client_info in local_clients:
+                    # Don't send typing status back to the person typing
+                    if client_info["user_id"] != sender_id:
+                        await ws.send_text(json.dumps(outbound))
 
     except asyncio.CancelledError:
         pass
