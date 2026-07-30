@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.core.redis import close_redis, init_redis
 from app.api.ws.chat import router as ws_router
+from app.api.v1.voice import router as voice_router
 
 
 @asynccontextmanager
@@ -30,6 +31,8 @@ app.add_middleware(
 
 # Root-level mount so path is /ws/chat/{room_id}
 app.include_router(ws_router)
+# Voice routes under /api/v1/voice
+app.include_router(voice_router, prefix="/api/v1/voice")
 
 
 @app.get("/health")

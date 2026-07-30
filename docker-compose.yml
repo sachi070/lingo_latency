@@ -30,12 +30,13 @@ services:
   backend-1:
     build: ./backend
     container_name: backend-1
-    ports:
-    - "8000:8000"
+    env_file: .env
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql+asyncpg://postgres:postgrespassword@postgres:5432/lingo_latency
       - GROQ_API_KEY=${GROQ_API_KEY}
+    volumes:
+      - ./backend/app:/app/app
     depends_on:
       redis:
         condition: service_healthy
@@ -45,10 +46,13 @@ services:
   backend-2:
     build: ./backend
     container_name: backend-2
+    env_file: .env
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql+asyncpg://postgres:postgrespassword@postgres:5432/lingo_latency
       - GROQ_API_KEY=${GROQ_API_KEY}
+    volumes:
+      - ./backend/app:/app/app
     depends_on:
       redis:
         condition: service_healthy
@@ -58,10 +62,13 @@ services:
   backend-3:
     build: ./backend
     container_name: backend-3
+    env_file: .env
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql+asyncpg://postgres:postgrespassword@postgres:5432/lingo_latency
       - GROQ_API_KEY=${GROQ_API_KEY}
+    volumes:
+      - ./backend/app:/app/app
     depends_on:
       redis:
         condition: service_healthy
