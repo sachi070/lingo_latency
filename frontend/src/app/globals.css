@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --color-plum: #4F0C28;
+  --color-plum-deep: #33071A;
+  --color-peri: #C5D2F8;
+  --color-peri-deep: #9AACE3;
+  --color-parchment: #F1EAD9;
+  --color-parchment-2: #E9E0CB;
+  --color-ink: #241318;
+  --color-ink-soft: #5A4550;
+  --color-brass: #A98857;
+
+  --font-serif: var(--font-pt-serif), serif;
+  --font-playfair: var(--font-playfair), serif;
+  --font-mono: var(--font-ibm-plex-mono), monospace;
+}
+
+@keyframes ticker-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker {
+  animation: ticker-scroll 26s linear infinite;
+}
