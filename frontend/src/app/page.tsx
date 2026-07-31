@@ -8,10 +8,19 @@ export default function LandingPage() {
   const [roomIdInput, setRoomIdInput] = useState("");
   const [userLanguage, setUserLanguage] = useState("en");
 
+  // Format custom room names into clean URL slugs
+  const formatRoomSlug = (rawInput: string) => {
+    return rawInput
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-") // Replace spaces with hyphens
+      .replace(/[^a-z0-9-]/g, ""); // Remove non-alphanumeric chars except hyphens
+  };
+
   const handleJoinRoom = (e: React.FormEvent) => {
     e.preventDefault();
-    const targetRoom = roomIdInput.trim() || "foreign-desk";
-    router.push(`/room/${encodeURIComponent(targetRoom)}?lang=${userLanguage}`);
+    const formattedSlug = formatRoomSlug(roomIdInput) || "foreign-desk";
+    router.push(`/room/${encodeURIComponent(formattedSlug)}?lang=${userLanguage}`);
   };
 
   const handleStartRandomRoom = () => {
@@ -20,7 +29,7 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-between">
+    <div className="min-h-screen flex flex-col justify-between bg-parchment text-ink font-serif">
       {/* Dateline Bar */}
       <div className="bg-plum text-parchment font-mono text-[11px] tracking-[0.14em] uppercase">
         <div className="max-w-[1180px] mx-auto px-[40px] py-2 flex justify-between items-center opacity-90">
@@ -65,7 +74,7 @@ export default function LandingPage() {
           onClick={handleStartRandomRoom}
           className="bg-plum text-parchment font-mono text-xs tracking-wider uppercase px-5 py-2.5 border border-plum hover:bg-plum-deep transition-all cursor-pointer"
         >
-          Join a room →
+          Join Random Room →
         </button>
       </nav>
 
@@ -97,7 +106,7 @@ export default function LandingPage() {
             <span className="float-left font-playfair font-black text-6xl text-plum leading-none pr-3 pt-1">
               E
             </span>
-            very message crosses the wire and lands in the reader's own language, before the sender's cursor has even blinked. No apps to switch, no copy-pasting — the room simply speaks everyone's language at once.
+            very message crosses the wire and lands in the reader's own language, before the sender's cursor has even blinked. Create a custom room or enter an existing code to connect.
           </p>
 
           {/* Dynamic Room Join Box */}
@@ -105,7 +114,7 @@ export default function LandingPage() {
             <div className="flex flex-wrap gap-3">
               <input
                 type="text"
-                placeholder="Enter Room Name (e.g. foreign-desk)"
+                placeholder="Name your room (e.g. tokyo-desk, tech-summit)"
                 value={roomIdInput}
                 onChange={(e) => setRoomIdInput(e.target.value)}
                 className="flex-1 min-w-[200px] border border-ink bg-parchment px-4 py-3 font-serif text-sm text-ink placeholder:text-ink-soft/60 focus:outline-none focus:ring-1 focus:ring-plum"
@@ -116,26 +125,26 @@ export default function LandingPage() {
                 className="border border-ink bg-parchment-2 px-3 py-3 font-mono text-xs text-ink uppercase focus:outline-none cursor-pointer"
               >
                 <option value="en">English (EN)</option>
-                <option value="ja">日本語 (JA)</option>
                 <option value="es">Español (ES)</option>
-                <option value="hi">हिन्दी (HI)</option>
+                <option value="ja">日本語 (JA)</option>
                 <option value="fr">Français (FR)</option>
                 <option value="de">Deutsch (DE)</option>
+                <option value="hi">हिन्दी (HI)</option>
               </select>
             </div>
             <div className="flex gap-3">
               <button
                 type="submit"
-                className="bg-plum text-parchment font-mono text-xs tracking-wider uppercase px-[26px] py-[14px] border border-plum hover:bg-plum-deep transition-all cursor-pointer"
+                className="bg-plum text-parchment font-mono text-xs tracking-wider uppercase px-[26px] py-[14px] border border-plum hover:bg-plum-deep transition-all cursor-pointer font-bold"
               >
-                Enter Room
+                Create / Enter Room →
               </button>
               <button
                 type="button"
                 onClick={handleStartRandomRoom}
                 className="bg-transparent text-ink font-mono text-xs tracking-wider uppercase px-[26px] py-[14px] border border-ink hover:bg-parchment-2 transition-all cursor-pointer"
               >
-                Create Random Room
+                Random Room
               </button>
             </div>
           </form>
@@ -204,10 +213,23 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-ink text-parchment py-[30px] px-[40px] font-mono text-[11px] tracking-wider uppercase flex justify-between items-center">
-        <span className="opacity-60">Lingo-Latency — printed on the wire since 2026</span>
-        <span className="opacity-60">FastAPI · Redis · Nginx · Next.js</span>
+      {/* Production Footer */}
+      <footer className="bg-ink text-parchment py-8 px-10 font-mono text-[11px] tracking-wider uppercase border-t border-brass/30">
+        <div className="max-w-[1180px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex flex-col md:flex-row items-center gap-2 md:gap-6 text-center md:text-left">
+            <span className="opacity-80 font-bold tracking-widest text-parchment">
+              LINGO-LATENCY WIRE
+            </span>
+            <span className="opacity-50 hidden md:inline">|</span>
+            <span className="opacity-60">
+              © {new Date().getFullYear()} Sachi Godbole. All Rights Reserved.
+            </span>
+          </div>
+
+          <div className="flex items-center gap-6 opacity-60">
+            <span>FastAPI · Redis · Nginx · Next.js</span>
+          </div>
+        </div>
       </footer>
     </div>
   );
