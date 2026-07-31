@@ -1,182 +1,89 @@
+# Lingo-Latency
 
-# 🌐 LingoLatency — Real-Time Multi-Lingual Translation Mesh
-
-A low-latency, real-time distributed chat application built with **FastAPI**, **WebSockets**, **Redis**, **PostgreSQL**, and **Groq AI (Llama 3.1)**.
-
-Users can chat in their native languages while messages are automatically translated and delivered in real-time to other participants with minimal latency.
+A distributed, low-latency translation wire for real-time multi-lingual communication.
 
 ---
 
-## 🏗️ System Architecture
+## Overview
 
-* **Backend Cluster**: Scaled FastAPI instances (`backend1`, `backend2`, `backend3`) handling WebSocket sessions and REST endpoints.
-* **Load Balancer**: **Nginx** routing WebSocket traffic and REST requests round-robin across backend replicas.
-* **Cache & Pub/Sub Layer**: **Redis** for broadcasting real-time WebSocket payloads across nodes and caching repeated translation frames.
-* **Database**: **PostgreSQL** (via `asyncpg` & SQLAlchemy) managing user accounts and chat room states.
-* **Translation Engine**: **Groq Cloud API (`llama-3.1-8b-instant`)** for high-speed LLM translation execution.
+Lingo-Latency connects multi-lingual correspondents in real-time chat rooms. When a user sends a message in their native language, every participant in the room views, reads, and listens to the dispatch translated instantly into their selected target language.
+
+By decoupling room state from individual server instances using a Redis Pub/Sub mesh, the application scales statelessly across multiple FastAPI nodes behind Nginx without dropping WebSockets or message continuity.
 
 ---
 
-## ⚡ Quickstart Guide
+## Key Capabilities
 
-### 1. Prerequisites
-
-* [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-* [wscat](https://www.npmjs.com/package/wscat) (for testing WebSocket connections)
-```bash
-npm install -g wscat
-
-```
-
-
+- **Real-Time Translation Fan-Out:** Messages land instantly in each user's native language, with one-click toggles to inspect original untranslated dispatches.
+- **Voice Integration (STT/TTS):** Native WebSpeech Speech-to-Text dictation for composing messages and Text-to-Speech audio playback for listening to incoming transmissions.
+- **Custom Rooms & Dynamic Language Switching:** Room slug generation, shareable invite codes, and inline language switching on the fly without session reloads.
+- **Transcript Logs & Presence Tracking:** Export complete room logs as formatted `.txt` transcripts with timestamps, alongside live typing indicator broadcasts over WebSockets.
 
 ---
 
-### 2. Environment Setup
+## Architecture & System Design
 
-Create a `.env` file in the project root directory:
+### Distributed Pipeline
 
-```env
-# Groq API Configuration
-GROQ_API_KEY=gsk_your_actual_groq_api_key_here
+1. **Gateway Layer:** Nginx acts as the single ingress gateway (Port 8080), handling SSL termination, WebSocket connection upgrading, and load balancing across application nodes.
 
-# JWT Authentication
-JWT_SECRET=super_dense_secret_key_change_in_production_32_bytes_min
+2. **Application Cluster:** Multiple stateless FastAPI instances process WebSocket framing, message validation, and REST requests.
 
-# Database & Cache Connection Strings
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/lingo_db
-REDIS_URL=redis://redis:6379/0
-
-```
+3. **Message Broker & Cache:** Redis Pub/Sub manages cross-node message fan-out and presence tracking. Translation payloads are cached per target language to minimize latency on concurrent broadcasts.
 
 ---
 
-### 3. Build & Launch Containers
+## Tech Stack
 
-Run Docker Compose to build and start the entire cluster in detached mode:
-
-```bash
-docker compose up -d --build
-
-```
-
-Verify that all services are active:
-
-```bash
-docker compose ps
-
-```
+- **Frontend:** Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS
+- **Backend:** FastAPI, Python 3.11+, Uvicorn
+- **Data & Messaging:** Redis Pub/Sub, Redis In-Memory KV
+- **Infrastructure:** Nginx, Docker, Docker Compose
 
 ---
 
-### 4. Initialize Database Schemas
+## API & Protocol Reference
 
-Compile the database tables inside the running cluster:
-
-```bash
-docker compose exec -T backend1 python -c "
-import asyncio
-from app.db.session import engine
-from app.models.user import Base
-
-async def init():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-asyncio.run(init())
-print('Database schemas compiled successfully!')
-"
-
-```
+| Protocol | Route | Description |
+|----------|-------|-------------|
+| `WS` | `/ws/chat/{room_id}` | Persistent WebSocket wire for messages, presence, and typing broadcasts |
+| `GET` | `/api/v1/chat/history/{room_id}` | Fetch recent room dispatch history for client initialization |
+| `GET` | `/health` | Ingress gateway and backend cluster health check |
 
 ---
 
-## 🧪 Quick Test Script
+## Getting Started
 
-Run this bash script in your terminal to create two users (Hindi & Spanish), generate a room, and output authentication tokens:
+### Prerequisites
 
-```bash
-# 1. Register Users
-curl -X POST http://localhost/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username": "user_hindi", "password": "securepassword123", "preferred_language": "hi"}'
+- Docker Engine `v20.10+`
+- Docker Compose `v2.0+`
+- Node.js `v18+` *(for local frontend development)*
 
-curl -X POST http://localhost/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username": "user_spanish", "password": "securepassword123", "preferred_language": "es"}'
+### Setup
 
-# 2. Get Access Tokens
-TOKEN_A=$(curl -X POST http://localhost/api/auth/login \
-  -d "username=user_hindi&password=securepassword123" \
-  | grep -o '"access_token":"[^"]*' | grep -o '[^"]*$')
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/sachi070/lingo_latency.git
+   cd lingo_latency
+   ```
 
-TOKEN_B=$(curl -X POST http://localhost/api/auth/login \
-  -d "username=user_spanish&password=securepassword123" \
-  | grep -o '"access_token":"[^"]*' | grep -o '[^"]*$')
+2. **Start the complete stack**
+   ```bash
+   docker compose up --build
+   ```
 
-# 3. Create a Chat Room
-ROOM_DATA=$(curl -X POST "http://localhost/api/rooms/create?name=GlobalMesh" \
-  -H "Authorization: Bearer $TOKEN_A")
+3. **Frontend**
+   ```
+   http://localhost:3000
+   ```
 
-ROOM_ID=$(echo $ROOM_DATA | grep -o '"room_id":"[^"]*' | grep -o '[^"]*$')
+4. **API Gateway**
+   ```
+   http://localhost:8080
+   ```
 
-# Display connection parameters
-echo "================================================="
-echo "ROOM_ID:  $ROOM_ID"
-echo "TOKEN_A:  $TOKEN_A"
-echo "TOKEN_B:  $TOKEN_B"
-echo "================================================="
-
-```
-
----
-
-## 💬 Live WebSocket Translation Demo
-
-Open **two terminal windows** side-by-side to simulate a cross-language conversation.
-
-### Terminal Tab #1 — User A (Hindi Profile)
-
-```bash
-wscat -c "ws://localhost/ws/<ROOM_ID>?token=<TOKEN_A>"
-
-```
-
-### Terminal Tab #2 — User B (Spanish Profile)
-
-```bash
-wscat -c "ws://localhost/ws/<ROOM_ID>?token=<TOKEN_B>"
-
-```
-
-### Send a Message:
-
-In **Terminal Tab #2 (Spanish)**, paste:
-
-```json
-{"type": "message", "text": "¡Hola amigos, bienvenidos a nuestra aplicación!", "timestamp": "2026-07-29T12:00:00Z"}
-
-```
-
-### Watch the Output:
-
-**Terminal Tab #1 (Hindi)** instantly receives the translated payload:
-
-```json
-{
-  "type": "message",
-  "sender_id": "2",
-  "sender_name": "user_spanish",
-  "text": "नमस्ते दोस्तों, हमारे एप्लिकेशन में आपका स्वागत है!",
-  "original_text": "¡Hola amigos, bienvenidos a nuestra aplicación!",
-  "source_lang": "es",
-  "target_lang": "hi",
-  "cached": false,
-  "confidence": 1.0,
-  "timestamp": "2026-07-29T12:00:00Z"
-}
-
-```
-
----
-
+5. **Health Check**
+   ```
+   http://localhost:8080/health
+   ```
